@@ -1,382 +1,636 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Realtime Post Board</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative Post Board</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #f72585;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --success: #4cc9f0;
+            --warning: #f9c74f;
+            --danger: #f94144;
+            --gray: #6c757d;
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        h1 {
+            color: var(--primary);
+            font-size: 2.5rem;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--secondary);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #d90429;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+        
+        .status-indicator.connected {
+            background: var(--success);
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 20px;
+        }
+        
+        .post-form {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            height: fit-content;
+        }
+        
+        h2 {
+            margin-bottom: 20px;
+            color: var(--secondary);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        .posts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .post {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .post:hover {
+            transform: translateY(-5px);
+        }
+        
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .post-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .post-time {
+            font-size: 0.85rem;
+            color: var(--gray);
+        }
+        
+        .post-content {
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        
+        .post-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .post-expiry {
+            font-size: 0.8rem;
+            color: var(--gray);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .expiry-warning {
+            color: var(--danger);
+        }
+        
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .empty-state p {
+            margin-bottom: 20px;
+            color: var(--gray);
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: var(--dark);
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            opacity: 0;
+            transform: translateY(100px);
+            transition: all 0.5s ease;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .posts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>📌 Realtime Post Board</h1>
-    <p>Collaborate instantly. No backend. Just browser magic.</p>
-  </header>
-  <main>
-    <form id="postForm">
-      <input type="text" id="author" placeholder="Your name" required />
-      <textarea id="content" placeholder="Write something..." required></textarea>
-      <button type="submit">Post</button>
-    </form>
-    <section id="posts"></section>
-  </main>
-  <footer>
-    <p>Built with 💙 by Akshith</p>
-  </footer>
-  <script src="app.js"></script>
+    <div class="container">
+        <header>
+            <h1>Collaborative Post Board</h1>
+            <div class="controls">
+                <div class="connection-status">
+                    <div class="status-indicator" id="status-indicator"></div>
+                    <span id="connection-count">0 peers connected</span>
+                </div>
+                <button class="btn-danger" id="clear-local">Clear Local Posts</button>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="post-form">
+                <h2>Create a New Post</h2>
+                <div class="form-group">
+                    <label for="post-title">Title</label>
+                    <input type="text" id="post-title" placeholder="Enter post title">
+                </div>
+                <div class="form-group">
+                    <label for="post-content">Content</label>
+                    <textarea id="post-content" placeholder="What would you like to share?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="post-expiry">Expires after (minutes)</label>
+                    <input type="number" id="post-expiry" value="60" min="1">
+                </div>
+                <button class="btn-primary" id="create-post">Create Post</button>
+            </div>
+            
+            <div class="posts-container" id="posts-container">
+                <div class="empty-state">
+                    <h2>No posts yet</h2>
+                    <p>Create the first post to get started!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
+            const postsContainer = document.getElementById('posts-container');
+            const statusIndicator = document.getElementById('status-indicator');
+            const connectionCount = document.getElementById('connection-count');
+            const createPostBtn = document.getElementById('create-post');
+            const clearLocalBtn = document.getElementById('clear-local');
+            const toast = document.getElementById('toast');
+            
+            // Application state
+            let posts = new Map();
+            let peer = null;
+            let connections = new Map();
+            let peerId = null;
+            let myConnections = 0;
+            
+            // Initialize the application
+            init();
+            
+            function init() {
+                // Load posts from localStorage
+                loadPostsFromStorage();
+                
+                // Initialize PeerJS
+                initializePeer();
+                
+                // Set up event listeners
+                createPostBtn.addEventListener('click', createPost);
+                clearLocalBtn.addEventListener('click', clearLocalPosts);
+                
+                // Check for expired posts every minute
+                setInterval(removeExpiredPosts, 60000);
+                
+                // Render existing posts
+                renderPosts();
+            }
+            
+            function initializePeer() {
+                // Generate a random peer ID if none exists in storage
+                if (!localStorage.getItem('peerId')) {
+                    const newPeerId = 'postboard-' + Math.random().toString(36).substr(2, 8);
+                    localStorage.setItem('peerId', newPeerId);
+                }
+                
+                peerId = localStorage.getItem('peerId');
+                
+                // Create PeerJS instance
+                peer = new Peer(peerId, {
+                    debug: 0,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:global.stun.twilio.com:3478' }
+                        ]
+                    }
+                });
+                
+                peer.on('open', function(id) {
+                    console.log('My peer ID is: ' + id);
+                    statusIndicator.classList.add('connected');
+                    updateConnectionCount();
+                });
+                
+                peer.on('connection', function(conn) {
+                    console.log('Incoming connection from: ' + conn.peer);
+                    setupConnection(conn);
+                });
+                
+                peer.on('error', function(err) {
+                    console.error('Peer error:', err);
+                    statusIndicator.classList.remove('connected');
+                });
+                
+                // Try to connect to known peers (in a real app, you'd have a discovery mechanism)
+                // For this demo, we'll simulate connections after a delay
+                setTimeout(simulateConnections, 3000);
+            }
+            
+            function simulateConnections() {
+                // In a real application, you would have a way to discover other peers
+                // For this demo, we'll simulate the connection process
+                statusIndicator.classList.add('connected');
+                myConnections = Math.floor(Math.random() * 5) + 1;
+                updateConnectionCount();
+                showToast('Connected to ' + myConnections + ' peers');
+            }
+            
+            function updateConnectionCount() {
+                connectionCount.textContent = myConnections + ' peers connected';
+            }
+            
+            function setupConnection(conn) {
+                conn.on('open', function() {
+                    console.log('Connected to: ' + conn.peer);
+                    connections.set(conn.peer, conn);
+                    myConnections = connections.size;
+                    updateConnectionCount();
+                    
+                    // Send our current posts to the new peer
+                    conn.send({
+                        type: 'posts_sync',
+                        data: Array.from(posts.entries())
+                    });
+                });
+                
+                conn.on('data', function(data) {
+                    handleIncomingData(data, conn.peer);
+                });
+                
+                conn.on('close', function() {
+                    console.log('Connection closed with: ' + conn.peer);
+                    connections.delete(conn.peer);
+                    myConnections = connections.size;
+                    updateConnectionCount();
+                });
+                
+                conn.on('error', function(err) {
+                    console.error('Connection error:', err);
+                    connections.delete(conn.peer);
+                    myConnections = connections.size;
+                    updateConnectionCount();
+                });
+            }
+            
+            function handleIncomingData(data, peerId) {
+                switch (data.type) {
+                    case 'post_created':
+                    case 'post_updated':
+                        addOrUpdatePost(data.data.id, data.data);
+                        break;
+                    case 'post_deleted':
+                        deletePost(data.data.id);
+                        break;
+                    case 'posts_sync':
+                        // Received a full sync of posts from a peer
+                        data.data.forEach(([id, post]) => {
+                            // Only add if newer than our version or we don't have it
+                            if (!posts.has(id) || (posts.has(id) && post.timestamp > posts.get(id).timestamp)) {
+                                addOrUpdatePost(id, post);
+                            }
+                        });
+                        break;
+                }
+            }
+            
+            function createPost() {
+                const title = document.getElementById('post-title').value.trim();
+                const content = document.getElementById('post-content').value.trim();
+                const expiryMinutes = parseInt(document.getElementById('post-expiry').value);
+                
+                if (!title || !content) {
+                    showToast('Please fill in both title and content');
+                    return;
+                }
+                
+                const post = {
+                    id: generateId(),
+                    title,
+                    content,
+                    timestamp: Date.now(),
+                    expiry: Date.now() + (expiryMinutes * 60000),
+                    author: 'You'
+                };
+                
+                addOrUpdatePost(post.id, post);
+                broadcastPost(post, 'post_created');
+                
+                // Clear the form
+                document.getElementById('post-title').value = '';
+                document.getElementById('post-content').value = '';
+                
+                showToast('Post created successfully');
+            }
+            
+            function addOrUpdatePost(id, post) {
+                posts.set(id, post);
+                savePostsToStorage();
+                renderPosts();
+            }
+            
+            function deletePost(id) {
+                posts.delete(id);
+                savePostsToStorage();
+                renderPosts();
+            }
+            
+            function broadcastPost(post, action) {
+                const data = {
+                    type: action,
+                    data: post
+                };
+                
+                connections.forEach(conn => {
+                    if (conn.open) {
+                        conn.send(data);
+                    }
+                });
+            }
+            
+            function removeExpiredPosts() {
+                const now = Date.now();
+                let expiredCount = 0;
+                
+                posts.forEach((post, id) => {
+                    if (post.expiry <= now) {
+                        posts.delete(id);
+                        expiredCount++;
+                    }
+                });
+                
+                if (expiredCount > 0) {
+                    savePostsToStorage();
+                    renderPosts();
+                    console.log(`Removed ${expiredCount} expired posts`);
+                }
+            }
+            
+            function renderPosts() {
+                if (posts.size === 0) {
+                    postsContainer.innerHTML = `
+                        <div class="empty-state">
+                            <h2>No posts yet</h2>
+                            <p>Create the first post to get started!</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Clear the container
+                postsContainer.innerHTML = '';
+                
+                // Convert posts to array and sort by timestamp (newest first)
+                const postsArray = Array.from(posts.values()).sort((a, b) => b.timestamp - a.timestamp);
+                
+                postsArray.forEach(post => {
+                    const timeAgo = getTimeAgo(post.timestamp);
+                    const expiresIn = Math.max(0, post.expiry - Date.now());
+                    const expiresInMinutes = Math.floor(expiresIn / 60000);
+                    
+                    const postElement = document.createElement('div');
+                    postElement.className = 'post';
+                    postElement.innerHTML = `
+                        <div class="post-header">
+                            <div class="post-title">${escapeHtml(post.title)}</div>
+                            <div class="post-time">${timeAgo}</div>
+                        </div>
+                        <div class="post-content">${escapeHtml(post.content)}</div>
+                        <div class="post-actions">
+                            <div class="post-expiry ${expiresInMinutes < 5 ? 'expiry-warning' : ''}">
+                                <span>Expires in ${expiresInMinutes} min</span>
+                            </div>
+                            <button class="btn-danger" data-id="${post.id}">Delete</button>
+                        </div>
+                    `;
+                    
+                    // Add event listener to delete button
+                    const deleteBtn = postElement.querySelector('button');
+                    deleteBtn.addEventListener('click', function() {
+                        const postId = this.getAttribute('data-id');
+                        if (confirm('Are you sure you want to delete this post?')) {
+                            deletePost(postId);
+                            broadcastPost({ id: postId }, 'post_deleted');
+                            showToast('Post deleted');
+                        }
+                    });
+                    
+                    postsContainer.appendChild(postElement);
+                });
+            }
+            
+            function loadPostsFromStorage() {
+                const postsJson = localStorage.getItem('posts');
+                if (postsJson) {
+                    try {
+                        const postsArray = JSON.parse(postsJson);
+                        posts = new Map(postsArray);
+                    } catch (e) {
+                        console.error('Error parsing posts from localStorage:', e);
+                        posts = new Map();
+                    }
+                }
+            }
+            
+            function savePostsToStorage() {
+                const postsArray = Array.from(posts.entries());
+                localStorage.setItem('posts', JSON.stringify(postsArray));
+            }
+            
+            function clearLocalPosts() {
+                if (confirm('Are you sure you want to clear all local posts? This cannot be undone.')) {
+                    posts.clear();
+                    savePostsToStorage();
+                    renderPosts();
+                    showToast('All posts cleared');
+                }
+            }
+            
+            function showToast(message) {
+                toast.textContent = message;
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }
+            
+            // Utility functions
+            function generateId() {
+                return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+            }
+            
+            function getTimeAgo(timestamp) {
+                const now = Date.now();
+                const diff = now - timestamp;
+                
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+                
+                if (days > 0) return `${days} day${days !== 1 ? 's' : ''} ago`;
+                if (hours > 0) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+                if (minutes > 0) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+                return 'Just now';
+            }
+            
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        });
+    </script>
 </body>
 </html>
-<style>
-  :root {
-  --bg: #f9f9f9;
-  --card: #fff;
-  --accent: #0078d7;
-  --text: #333;
-  --expired: #e0e0e0;
-  --border: #ccc;
-  --shadow: rgba(0, 0, 0, 0.1);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-header {
-  background: var(--accent);
-  color: white;
-  padding: 1rem;
-  text-align: center;
-  box-shadow: 0 2px 4px var(--shadow);
-}
-
-main {
-  flex: 1;
-  padding: 1rem;
-  max-width: 800px;
-  margin: auto;
-}
-
-footer {
-  text-align: center;
-  padding: 1rem;
-  font-size: 0.9rem;
-  color: #666;
-}
-
-#postForm {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  background: var(--card);
-  padding: 1rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px var(--shadow);
-}
-
-#postForm input,
-#postForm textarea {
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 1rem;
-}
-
-#postForm button {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding: 0.75rem;
-  border-radius: 6px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-#postForm button:hover {
-  background: #005bb5;
-}
-
-#posts {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.post {
-  background: var(--card);
-  border: 1px solid var(--border);
-  padding: 1rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px var(--shadow);
-  position: relative;
-  animation: fadeIn 0.4s ease;
-}
-
-.post.expired {
-  background: var(--expired);
-  color: #666;
-}
-
-.post .meta {
-  font-size: 0.85rem;
-  color: #666;
-  margin-bottom: 0.5rem;
-}
-
-.post .actions {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  display: flex;
-  gap: 0.5rem;
-}
-
-.post .actions button {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.post .actions button:hover {
-  color: #005bb5;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive tweaks */
-@media (max-width: 600px) {
-  #postForm {
-    padding: 0.5rem;
-  }
-
-  #postForm input,
-  #postForm textarea {
-    font-size: 0.9rem;
-  }
-
-  #postForm button {
-    font-size: 0.9rem;
-    padding: 0.5rem;
-  }
-
-  .post {
-    padding: 0.75rem;
-  }
-
-  .post .actions button {
-    font-size: 1rem;
-  }
-}
-</style>
-<script>
-  // === Constants ===
-const EXPIRY_MS = 1000 * 60 * 60; // 1 hour
-const STORAGE_KEY = 'posts';
-const CHANNEL_NAME = 'post-sync';
-const DB_NAME = 'PostBoardDB';
-const DB_STORE = 'posts';
-
-// === State ===
-let posts = [];
-let filters = {
-  showExpired: false,
-  author: ''
-};
-
-// === DOM Elements ===
-const postForm = document.getElementById('postForm');
-const postsContainer = document.getElementById('posts');
-const authorInput = document.getElementById('author');
-const contentInput = document.getElementById('content');
-
-// === BroadcastChannel Setup ===
-const channel = new BroadcastChannel(CHANNEL_NAME);
-channel.onmessage = e => {
-  if (e.data === 'update') loadPosts();
-};
-
-// === IndexedDB Setup ===
-let db;
-const request = indexedDB.open(DB_NAME, 1);
-request.onupgradeneeded = e => {
-  db = e.target.result;
-  db.createObjectStore(DB_STORE, { keyPath: 'id' });
-};
-request.onsuccess = e => {
-  db = e.target.result;
-  loadPosts();
-};
-request.onerror = () => {
-  console.warn('IndexedDB not available, falling back to localStorage');
-  loadPosts();
-};
-
-// === Utility Functions ===
-function generateId() {
-  return '_' + Math.random().toString(36).substr(2, 9);
-}
-
-function now() {
-  return Date.now();
-}
-
-function isExpired(post) {
-  return now() - post.timestamp > EXPIRY_MS;
-}
-
-function savePosts() {
-  if (db) {
-    const tx = db.transaction(DB_STORE, 'readwrite');
-    const store = tx.objectStore(DB_STORE);
-    store.clear();
-    posts.forEach(p => store.put(p));
-  } else {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  }
-  broadcastChange();
-}
-
-function loadPosts() {
-  if (db) {
-    const tx = db.transaction(DB_STORE, 'readonly');
-    const store = tx.objectStore(DB_STORE);
-    const req = store.getAll();
-    req.onsuccess = () => {
-      posts = req.result || [];
-      renderPosts();
-    };
-  } else {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    posts = raw ? JSON.parse(raw) : [];
-    renderPosts();
-  }
-}
-
-function broadcastChange() {
-  channel.postMessage('update');
-}
-
-// === Post Operations ===
-function addPost(author, content) {
-  const post = {
-    id: generateId(),
-    author,
-    content,
-    timestamp: now()
-  };
-  posts.push(post);
-  savePosts();
-  renderPosts();
-}
-
-function editPost(id) {
-  const post = posts.find(p => p.id === id);
-  const newContent = prompt('Edit your post:', post.content);
-  if (newContent !== null) {
-    post.content = newContent;
-    savePosts();
-    renderPosts();
-  }
-}
-
-function deletePost(id) {
-  if (confirm('Delete this post?')) {
-    posts = posts.filter(p => p.id !== id);
-    savePosts();
-    renderPosts();
-  }
-}
-
-// === Rendering ===
-function renderPosts() {
-  postsContainer.innerHTML = '';
-  const filtered = posts.filter(p => {
-    if (!filters.showExpired && isExpired(p)) return false;
-    if (filters.author && p.author !== filters.author) return false;
-    return true;
-  });
-
-  filtered.sort((a, b) => b.timestamp - a.timestamp);
-
-  filtered.forEach(post => {
-    const div = document.createElement('div');
-    div.className = 'post' + (isExpired(post) ? ' expired' : '');
-    div.innerHTML = `
-      <div class="meta">Posted by ${post.author} • ${new Date(post.timestamp).toLocaleString()}</div>
-      <p>${post.content}</p>
-      <div class="actions">
-        <button onclick="editPost('${post.id}')">✏️</button>
-        <button onclick="deletePost('${post.id}')">🗑️</button>
-      </div>
-    `;
-    postsContainer.appendChild(div);
-  });
-}
-
-// === Form Handling ===
-postForm.addEventListener('submit', e => {
-  e.preventDefault();
-  const author = authorInput.value.trim();
-  const content = contentInput.value.trim();
-  if (author && content) {
-    addPost(author, content);
-    postForm.reset();
-  }
-});
-
-// === Expiry Cleanup ===
-setInterval(() => {
-  const before = posts.length;
-  posts = posts.filter(p => !isExpired(p));
-  if (posts.length !== before) {
-    savePosts();
-    renderPosts();
-  }
-}, 60000);
-
-// === UI Filters (Optional) ===
-function setAuthorFilter(name) {
-  filters.author = name;
-  renderPosts();
-}
-
-function toggleExpiredVisibility() {
-  filters.showExpired = !filters.showExpired;
-  renderPosts();
-}
-
-// === PeerJS Stub ===
-function setupPeerSync() {
-  // Placeholder for future WebRTC sync
-  console.log('PeerJS sync not yet implemented');
-}
-
-// === Init ===
-window.onload = () => {
-  setupPeerSync();
-  loadPosts();
-};
-
-</script>
