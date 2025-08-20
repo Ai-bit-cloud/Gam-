@@ -58,6 +58,7 @@
             display: flex;
             gap: 15px;
             align-items: center;
+            flex-wrap: wrap;
         }
         
         button {
@@ -78,6 +79,15 @@
             background: var(--secondary);
         }
         
+        .btn-secondary {
+            background: var(--gray);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
         .btn-danger {
             background: var(--danger);
             color: white;
@@ -85,6 +95,15 @@
         
         .btn-danger:hover {
             background: #d90429;
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #2a9d8f;
         }
         
         .connection-status {
@@ -119,9 +138,22 @@
             height: fit-content;
         }
         
+        .connection-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 20px;
+        }
+        
         h2 {
             margin-bottom: 20px;
             color: var(--secondary);
+        }
+        
+        h3 {
+            margin: 15px 0 10px;
+            color: var(--primary);
         }
         
         .form-group {
@@ -145,6 +177,37 @@
         textarea {
             min-height: 120px;
             resize: vertical;
+        }
+        
+        .peer-id-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .peer-id-input {
+            flex: 1;
+        }
+        
+        .peer-list {
+            margin-top: 15px;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .peer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .peer-item:last-child {
+            border-bottom: none;
         }
         
         .posts-container {
@@ -240,7 +303,7 @@
             transform: translateY(0);
         }
         
-        @media (max-width: 768px) {
+        @media (max-width: 968px) {
             .main-content {
                 grid-template-columns: 1fr;
             }
@@ -254,6 +317,16 @@
             .posts-container {
                 grid-template-columns: 1fr;
             }
+            
+            .controls {
+                justify-content: center;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .peer-id-container {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -266,26 +339,54 @@
                     <div class="status-indicator" id="status-indicator"></div>
                     <span id="connection-count">0 peers connected</span>
                 </div>
+                <button class="btn-secondary" id="copy-id">Copy My ID</button>
                 <button class="btn-danger" id="clear-local">Clear Local Posts</button>
+                <button class="btn-success" id="connect-peer">Connect to Peer</button>
             </div>
         </header>
         
         <div class="main-content">
-            <div class="post-form">
-                <h2>Create a New Post</h2>
-                <div class="form-group">
-                    <label for="post-title">Title</label>
-                    <input type="text" id="post-title" placeholder="Enter post title">
+            <div>
+                <div class="connection-panel">
+                    <h2>Peer Connections</h2>
+                    <div class="form-group">
+                        <label for="my-peer-id">Your Peer ID</label>
+                        <div class="peer-id-container">
+                            <input type="text" id="my-peer-id" readonly>
+                            <button class="btn-secondary" id="generate-new-id">New ID</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="connect-to-peer">Connect to another peer</label>
+                        <div class="peer-id-container">
+                            <input type="text" id="connect-to-peer" placeholder="Enter peer ID">
+                            <button class="btn-primary" id="connect-btn">Connect</button>
+                        </div>
+                    </div>
+                    
+                    <h3>Connected Peers</h3>
+                    <div class="peer-list" id="peer-list">
+                        <div class="empty-state">No peers connected yet</div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="post-content">Content</label>
-                    <textarea id="post-content" placeholder="What would you like to share?"></textarea>
+                
+                <div class="post-form">
+                    <h2>Create a New Post</h2>
+                    <div class="form-group">
+                        <label for="post-title">Title</label>
+                        <input type="text" id="post-title" placeholder="Enter post title">
+                    </div>
+                    <div class="form-group">
+                        <label for="post-content">Content</label>
+                        <textarea id="post-content" placeholder="What would you like to share?"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="post-expiry">Expires after (minutes)</label>
+                        <input type="number" id="post-expiry" value="60" min="1">
+                    </div>
+                    <button class="btn-primary" id="create-post">Create Post</button>
                 </div>
-                <div class="form-group">
-                    <label for="post-expiry">Expires after (minutes)</label>
-                    <input type="number" id="post-expiry" value="60" min="1">
-                </div>
-                <button class="btn-primary" id="create-post">Create Post</button>
             </div>
             
             <div class="posts-container" id="posts-container">
@@ -307,6 +408,13 @@
             const connectionCount = document.getElementById('connection-count');
             const createPostBtn = document.getElementById('create-post');
             const clearLocalBtn = document.getElementById('clear-local');
+            const copyIdBtn = document.getElementById('copy-id');
+            const generateNewIdBtn = document.getElementById('generate-new-id');
+            const connectBtn = document.getElementById('connect-btn');
+            const connectPeerBtn = document.getElementById('connect-peer');
+            const myPeerIdInput = document.getElementById('my-peer-id');
+            const connectToPeerInput = document.getElementById('connect-to-peer');
+            const peerList = document.getElementById('peer-list');
             const toast = document.getElementById('toast');
             
             // Application state
@@ -314,7 +422,6 @@
             let peer = null;
             let connections = new Map();
             let peerId = null;
-            let myConnections = 0;
             
             // Initialize the application
             init();
@@ -329,6 +436,10 @@
                 // Set up event listeners
                 createPostBtn.addEventListener('click', createPost);
                 clearLocalBtn.addEventListener('click', clearLocalPosts);
+                copyIdBtn.addEventListener('click', copyPeerId);
+                generateNewIdBtn.addEventListener('click', generateNewPeerId);
+                connectBtn.addEventListener('click', connectToPeer);
+                connectPeerBtn.addEventListener('click', focusOnPeerInput);
                 
                 // Check for expired posts every minute
                 setInterval(removeExpiredPosts, 60000);
@@ -340,11 +451,11 @@
             function initializePeer() {
                 // Generate a random peer ID if none exists in storage
                 if (!localStorage.getItem('peerId')) {
-                    const newPeerId = 'postboard-' + Math.random().toString(36).substr(2, 8);
-                    localStorage.setItem('peerId', newPeerId);
+                    generateNewPeerId();
+                } else {
+                    peerId = localStorage.getItem('peerId');
+                    myPeerIdInput.value = peerId;
                 }
-                
-                peerId = localStorage.getItem('peerId');
                 
                 // Create PeerJS instance
                 peer = new Peer(peerId, {
@@ -361,6 +472,7 @@
                     console.log('My peer ID is: ' + id);
                     statusIndicator.classList.add('connected');
                     updateConnectionCount();
+                    showToast('Connected to signaling server');
                 });
                 
                 peer.on('connection', function(conn) {
@@ -371,38 +483,42 @@
                 peer.on('error', function(err) {
                     console.error('Peer error:', err);
                     statusIndicator.classList.remove('connected');
+                    
+                    if (err.type === 'peer-unavailable') {
+                        showToast('Peer unavailable: ' + err.peer);
+                    } else if (err.type === 'unavailable-id') {
+                        showToast('Peer ID unavailable, generating a new one');
+                        generateNewPeerId();
+                    } else {
+                        showToast('Connection error: ' + err.message);
+                    }
                 });
                 
-                // Try to connect to known peers (in a real app, you'd have a discovery mechanism)
-                // For this demo, we'll simulate connections after a delay
-                setTimeout(simulateConnections, 3000);
-            }
-            
-            function simulateConnections() {
-                // In a real application, you would have a way to discover other peers
-                // For this demo, we'll simulate the connection process
-                statusIndicator.classList.add('connected');
-                myConnections = Math.floor(Math.random() * 5) + 1;
-                updateConnectionCount();
-                showToast('Connected to ' + myConnections + ' peers');
-            }
-            
-            function updateConnectionCount() {
-                connectionCount.textContent = myConnections + ' peers connected';
+                peer.on('disconnected', function() {
+                    statusIndicator.classList.remove('connected');
+                    showToast('Disconnected from signaling server');
+                    
+                    // Try to reconnect
+                    setTimeout(function() {
+                        peer.reconnect();
+                    }, 5000);
+                });
             }
             
             function setupConnection(conn) {
                 conn.on('open', function() {
                     console.log('Connected to: ' + conn.peer);
                     connections.set(conn.peer, conn);
-                    myConnections = connections.size;
                     updateConnectionCount();
+                    updatePeerList();
                     
                     // Send our current posts to the new peer
                     conn.send({
                         type: 'posts_sync',
                         data: Array.from(posts.entries())
                     });
+                    
+                    showToast('Connected to peer: ' + conn.peer);
                 });
                 
                 conn.on('data', function(data) {
@@ -412,16 +528,56 @@
                 conn.on('close', function() {
                     console.log('Connection closed with: ' + conn.peer);
                     connections.delete(conn.peer);
-                    myConnections = connections.size;
                     updateConnectionCount();
+                    updatePeerList();
+                    showToast('Disconnected from peer: ' + conn.peer);
                 });
                 
                 conn.on('error', function(err) {
                     console.error('Connection error:', err);
                     connections.delete(conn.peer);
-                    myConnections = connections.size;
                     updateConnectionCount();
+                    updatePeerList();
                 });
+            }
+            
+            function connectToPeer() {
+                const peerId = connectToPeerInput.value.trim();
+                if (!peerId) {
+                    showToast('Please enter a peer ID');
+                    return;
+                }
+                
+                if (peerId === myPeerIdInput.value) {
+                    showToast("Can't connect to yourself");
+                    return;
+                }
+                
+                if (connections.has(peerId)) {
+                    showToast('Already connected to this peer');
+                    return;
+                }
+                
+                console.log('Attempting to connect to: ' + peerId);
+                
+                try {
+                    const conn = peer.connect(peerId, {
+                        reliable: true
+                    });
+                    
+                    conn.on('open', function() {
+                        setupConnection(conn);
+                        connectToPeerInput.value = '';
+                    });
+                    
+                    conn.on('error', function(err) {
+                        console.error('Connection error:', err);
+                        showToast('Failed to connect to peer: ' + peerId);
+                    });
+                } catch (err) {
+                    console.error('Error creating connection:', err);
+                    showToast('Error creating connection');
+                }
             }
             
             function handleIncomingData(data, peerId) {
@@ -429,18 +585,26 @@
                     case 'post_created':
                     case 'post_updated':
                         addOrUpdatePost(data.data.id, data.data);
+                        showToast('Received post from peer: ' + peerId);
                         break;
                     case 'post_deleted':
                         deletePost(data.data.id);
+                        showToast('Post deleted by peer: ' + peerId);
                         break;
                     case 'posts_sync':
                         // Received a full sync of posts from a peer
+                        let updatedCount = 0;
                         data.data.forEach(([id, post]) => {
                             // Only add if newer than our version or we don't have it
                             if (!posts.has(id) || (posts.has(id) && post.timestamp > posts.get(id).timestamp)) {
                                 addOrUpdatePost(id, post);
+                                updatedCount++;
                             }
                         });
+                        
+                        if (updatedCount > 0) {
+                            showToast(`Synced ${updatedCount} posts from peer: ${peerId}`);
+                        }
                         break;
                 }
             }
@@ -570,6 +734,46 @@
                 });
             }
             
+            function updateConnectionCount() {
+                connectionCount.textContent = connections.size + ' peers connected';
+            }
+            
+            function updatePeerList() {
+                if (connections.size === 0) {
+                    peerList.innerHTML = '<div class="empty-state">No peers connected yet</div>';
+                    return;
+                }
+                
+                peerList.innerHTML = '';
+                connections.forEach((conn, peerId) => {
+                    const peerItem = document.createElement('div');
+                    peerItem.className = 'peer-item';
+                    peerItem.innerHTML = `
+                        <span>${peerId}</span>
+                        <button class="btn-danger btn-small" data-peer="${peerId}">Disconnect</button>
+                    `;
+                    
+                    const disconnectBtn = peerItem.querySelector('button');
+                    disconnectBtn.addEventListener('click', function() {
+                        const peerId = this.getAttribute('data-peer');
+                        disconnectPeer(peerId);
+                    });
+                    
+                    peerList.appendChild(peerItem);
+                });
+            }
+            
+            function disconnectPeer(peerId) {
+                const conn = connections.get(peerId);
+                if (conn) {
+                    conn.close();
+                    connections.delete(peerId);
+                    updateConnectionCount();
+                    updatePeerList();
+                    showToast('Disconnected from peer: ' + peerId);
+                }
+            }
+            
             function loadPostsFromStorage() {
                 const postsJson = localStorage.getItem('posts');
                 if (postsJson) {
@@ -595,6 +799,29 @@
                     renderPosts();
                     showToast('All posts cleared');
                 }
+            }
+            
+            function copyPeerId() {
+                myPeerIdInput.select();
+                document.execCommand('copy');
+                showToast('Peer ID copied to clipboard');
+            }
+            
+            function generateNewPeerId() {
+                const newPeerId = 'postboard-' + Math.random().toString(36).substr(2, 8);
+                localStorage.setItem('peerId', newPeerId);
+                myPeerIdInput.value = newPeerId;
+                
+                if (peer) {
+                    peer.destroy();
+                }
+                
+                initializePeer();
+                showToast('New peer ID generated');
+            }
+            
+            function focusOnPeerInput() {
+                connectToPeerInput.focus();
             }
             
             function showToast(message) {
