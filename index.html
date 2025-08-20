@@ -1,16 +1,382 @@
-<!-- index.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Game Hub</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Realtime Post Board</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>🎮 Akshith's Game Portal</h1>
-  <div class="game-grid">
-    <a href="projects/bitlife/index.html" class="game-card">BitLife</a>
-    <a href="projects/slope/index.html" class="game-card">Slope</a>
-    <!-- Add more games here -->
-  </div>
+  <header>
+    <h1>📌 Realtime Post Board</h1>
+    <p>Collaborate instantly. No backend. Just browser magic.</p>
+  </header>
+  <main>
+    <form id="postForm">
+      <input type="text" id="author" placeholder="Your name" required />
+      <textarea id="content" placeholder="Write something..." required></textarea>
+      <button type="submit">Post</button>
+    </form>
+    <section id="posts"></section>
+  </main>
+  <footer>
+    <p>Built with 💙 by Akshith</p>
+  </footer>
+  <script src="app.js"></script>
 </body>
 </html>
+<style>
+  :root {
+  --bg: #f9f9f9;
+  --card: #fff;
+  --accent: #0078d7;
+  --text: #333;
+  --expired: #e0e0e0;
+  --border: #ccc;
+  --shadow: rgba(0, 0, 0, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  background: var(--accent);
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+main {
+  flex: 1;
+  padding: 1rem;
+  max-width: 800px;
+  margin: auto;
+}
+
+footer {
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+#postForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background: var(--card);
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px var(--shadow);
+}
+
+#postForm input,
+#postForm textarea {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+#postForm button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+#postForm button:hover {
+  background: #005bb5;
+}
+
+#posts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.post {
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px var(--shadow);
+  position: relative;
+  animation: fadeIn 0.4s ease;
+}
+
+.post.expired {
+  background: var(--expired);
+  color: #666;
+}
+
+.post .meta {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.post .actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.post .actions button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.post .actions button:hover {
+  color: #005bb5;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive tweaks */
+@media (max-width: 600px) {
+  #postForm {
+    padding: 0.5rem;
+  }
+
+  #postForm input,
+  #postForm textarea {
+    font-size: 0.9rem;
+  }
+
+  #postForm button {
+    font-size: 0.9rem;
+    padding: 0.5rem;
+  }
+
+  .post {
+    padding: 0.75rem;
+  }
+
+  .post .actions button {
+    font-size: 1rem;
+  }
+}
+</style>
+<script>
+  // === Constants ===
+const EXPIRY_MS = 1000 * 60 * 60; // 1 hour
+const STORAGE_KEY = 'posts';
+const CHANNEL_NAME = 'post-sync';
+const DB_NAME = 'PostBoardDB';
+const DB_STORE = 'posts';
+
+// === State ===
+let posts = [];
+let filters = {
+  showExpired: false,
+  author: ''
+};
+
+// === DOM Elements ===
+const postForm = document.getElementById('postForm');
+const postsContainer = document.getElementById('posts');
+const authorInput = document.getElementById('author');
+const contentInput = document.getElementById('content');
+
+// === BroadcastChannel Setup ===
+const channel = new BroadcastChannel(CHANNEL_NAME);
+channel.onmessage = e => {
+  if (e.data === 'update') loadPosts();
+};
+
+// === IndexedDB Setup ===
+let db;
+const request = indexedDB.open(DB_NAME, 1);
+request.onupgradeneeded = e => {
+  db = e.target.result;
+  db.createObjectStore(DB_STORE, { keyPath: 'id' });
+};
+request.onsuccess = e => {
+  db = e.target.result;
+  loadPosts();
+};
+request.onerror = () => {
+  console.warn('IndexedDB not available, falling back to localStorage');
+  loadPosts();
+};
+
+// === Utility Functions ===
+function generateId() {
+  return '_' + Math.random().toString(36).substr(2, 9);
+}
+
+function now() {
+  return Date.now();
+}
+
+function isExpired(post) {
+  return now() - post.timestamp > EXPIRY_MS;
+}
+
+function savePosts() {
+  if (db) {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    store.clear();
+    posts.forEach(p => store.put(p));
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+  }
+  broadcastChange();
+}
+
+function loadPosts() {
+  if (db) {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const store = tx.objectStore(DB_STORE);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      posts = req.result || [];
+      renderPosts();
+    };
+  } else {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    posts = raw ? JSON.parse(raw) : [];
+    renderPosts();
+  }
+}
+
+function broadcastChange() {
+  channel.postMessage('update');
+}
+
+// === Post Operations ===
+function addPost(author, content) {
+  const post = {
+    id: generateId(),
+    author,
+    content,
+    timestamp: now()
+  };
+  posts.push(post);
+  savePosts();
+  renderPosts();
+}
+
+function editPost(id) {
+  const post = posts.find(p => p.id === id);
+  const newContent = prompt('Edit your post:', post.content);
+  if (newContent !== null) {
+    post.content = newContent;
+    savePosts();
+    renderPosts();
+  }
+}
+
+function deletePost(id) {
+  if (confirm('Delete this post?')) {
+    posts = posts.filter(p => p.id !== id);
+    savePosts();
+    renderPosts();
+  }
+}
+
+// === Rendering ===
+function renderPosts() {
+  postsContainer.innerHTML = '';
+  const filtered = posts.filter(p => {
+    if (!filters.showExpired && isExpired(p)) return false;
+    if (filters.author && p.author !== filters.author) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => b.timestamp - a.timestamp);
+
+  filtered.forEach(post => {
+    const div = document.createElement('div');
+    div.className = 'post' + (isExpired(post) ? ' expired' : '');
+    div.innerHTML = `
+      <div class="meta">Posted by ${post.author} • ${new Date(post.timestamp).toLocaleString()}</div>
+      <p>${post.content}</p>
+      <div class="actions">
+        <button onclick="editPost('${post.id}')">✏️</button>
+        <button onclick="deletePost('${post.id}')">🗑️</button>
+      </div>
+    `;
+    postsContainer.appendChild(div);
+  });
+}
+
+// === Form Handling ===
+postForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const author = authorInput.value.trim();
+  const content = contentInput.value.trim();
+  if (author && content) {
+    addPost(author, content);
+    postForm.reset();
+  }
+});
+
+// === Expiry Cleanup ===
+setInterval(() => {
+  const before = posts.length;
+  posts = posts.filter(p => !isExpired(p));
+  if (posts.length !== before) {
+    savePosts();
+    renderPosts();
+  }
+}, 60000);
+
+// === UI Filters (Optional) ===
+function setAuthorFilter(name) {
+  filters.author = name;
+  renderPosts();
+}
+
+function toggleExpiredVisibility() {
+  filters.showExpired = !filters.showExpired;
+  renderPosts();
+}
+
+// === PeerJS Stub ===
+function setupPeerSync() {
+  // Placeholder for future WebRTC sync
+  console.log('PeerJS sync not yet implemented');
+}
+
+// === Init ===
+window.onload = () => {
+  setupPeerSync();
+  loadPosts();
+};
+
+</script>
