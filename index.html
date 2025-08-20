@@ -190,6 +190,16 @@
             resize: vertical;
         }
         
+        .share-url-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .share-url-input {
+            flex: 1;
+        }
+        
         .peer-list {
             margin-top: 15px;
             padding: 15px;
@@ -316,6 +326,27 @@
             height: 20px;
         }
         
+        .connection-help {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid var(--warning);
+        }
+        
+        .connection-help h4 {
+            margin-bottom: 10px;
+            color: var(--warning);
+        }
+        
+        .connection-help ul {
+            padding-left: 20px;
+        }
+        
+        .connection-help li {
+            margin-bottom: 8px;
+        }
+        
         @media (max-width: 968px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -335,6 +366,12 @@
                 justify-content: center;
             }
         }
+        
+        @media (max-width: 576px) {
+            .share-url-container {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -344,7 +381,7 @@
             <div class="controls">
                 <div class="connection-status">
                     <div class="status-indicator" id="status-indicator"></div>
-                    <span id="connection-status-text">Connecting...</span>
+                    <span id="connection-status-text">Initializing...</span>
                 </div>
                 <div class="user-count">
                     <svg class="user-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -352,6 +389,7 @@
                     </svg>
                     <span id="user-count">1 user online</span>
                 </div>
+                <button class="btn-secondary" id="copy-url">Copy Share URL</button>
                 <button class="btn-danger" id="clear-local">Clear Local Posts</button>
             </div>
         </header>
@@ -360,11 +398,22 @@
             <div>
                 <div class="connection-panel">
                     <h2>Room Connections</h2>
-                    <p>You're automatically connected to everyone else visiting this page!</p>
+                    <div class="form-group">
+                        <label for="share-url">Share this URL to collaborate</label>
+                        <div class="share-url-container">
+                            <input type="text" id="share-url" readonly>
+                            <button class="btn-secondary" id="share-btn">Copy</button>
+                        </div>
+                    </div>
                     
                     <h3>Connected Users</h3>
                     <div class="peer-list" id="peer-list">
                         <div class="empty-state">Connecting to other users...</div>
+                    </div>
+                    
+                    <div class="connection-help">
+                        <h4>Connection Tips</h4>
+                        <p>For best results, make sure all users are on the same network (Wi-Fi).</p>
                     </div>
                 </div>
                 
@@ -406,6 +455,9 @@
             const userCountElement = document.getElementById('user-count');
             const createPostBtn = document.getElementById('create-post');
             const clearLocalBtn = document.getElementById('clear-local');
+            const shareUrlInput = document.getElementById('share-url');
+            const shareBtn = document.getElementById('share-btn');
+            const copyUrlBtn = document.getElementById('copy-url');
             const peerList = document.getElementById('peer-list');
             const toast = document.getElementById('toast');
             
@@ -415,14 +467,16 @@
             let connections = new Map();
             let peerId = null;
             let roomId = null;
-            let knownPeers = new Set();
             
             // Initialize the application
             init();
             
             function init() {
-                // Generate a consistent room ID based on the URL
-                roomId = generateRoomIdFromUrl();
+                // Generate a room ID based on URL parameters or create a new one
+                roomId = getRoomIdFromUrl();
+                
+                // Update the share URL
+                updateShareUrl();
                 
                 // Load posts from localStorage
                 loadPostsFromStorage();
@@ -433,6 +487,8 @@
                 // Set up event listeners
                 createPostBtn.addEventListener('click', createPost);
                 clearLocalBtn.addEventListener('click', clearLocalPosts);
+                shareBtn.addEventListener('click', copyShareUrl);
+                copyUrlBtn.addEventListener('click', copyShareUrl);
                 
                 // Check for expired posts every minute
                 setInterval(removeExpiredPosts, 60000);
@@ -444,24 +500,46 @@
                 startPeerDiscovery();
             }
             
-            function generateRoomIdFromUrl() {
-                // Use the URL path to create a consistent room ID
-                const path = window.location.pathname;
-                const hash = path.split('/').reduce((acc, segment) => {
-                    return acc + segment.length;
-                }, 0);
+            function getRoomIdFromUrl() {
+                // Get room ID from URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                let roomId = urlParams.get('room');
                 
-                return `room-${hash}`;
+                // If no room ID in URL, generate a new one
+                if (!roomId) {
+                    roomId = generateRoomId();
+                    // Update URL with the new room ID
+                    updateUrlWithRoomId(roomId);
+                }
+                
+                return roomId;
+            }
+            
+            function generateRoomId() {
+                // Generate a random room ID
+                return 'room-' + Math.random().toString(36).substr(2, 8);
+            }
+            
+            function updateUrlWithRoomId(roomId) {
+                // Update URL without reloading the page
+                const url = new URL(window.location);
+                url.searchParams.set('room', roomId);
+                window.history.replaceState({}, '', url);
+            }
+            
+            function updateShareUrl() {
+                // Update the share URL input
+                shareUrlInput.value = window.location.href;
             }
             
             function initializePeer() {
-                // Generate a random peer ID
+                // Generate a peer ID based on room ID and a random suffix
                 const randomSuffix = Math.random().toString(36).substr(2, 5);
                 peerId = `${roomId}-${randomSuffix}`;
                 
                 // Create PeerJS instance
                 peer = new Peer(peerId, {
-                    debug: 0,
+                    debug: 2,
                     config: {
                         iceServers: [
                             { urls: 'stun:stun.l.google.com:19302' },
@@ -473,7 +551,7 @@
                 peer.on('open', function(id) {
                     console.log('My peer ID is: ' + id);
                     statusIndicator.classList.add('searching');
-                    connectionStatusText.textContent = 'Searching for peers...';
+                    connectionStatusText.textContent = 'Looking for other users...';
                     updateUserCount();
                 });
                 
@@ -491,9 +569,6 @@
                     
                     if (err.type === 'peer-unavailable') {
                         // This is expected during discovery
-                    } else if (err.type === 'unavailable-id') {
-                        // Try with a different ID
-                        setTimeout(initializePeer, 1000);
                     } else {
                         showToast('Connection error: ' + err.message);
                     }
@@ -516,29 +591,28 @@
                 
                 // Try to connect to potential peers in the same room
                 // This is a simplified approach - in reality you'd need a proper discovery mechanism
-                for (let i = 1; i <= 5; i++) {
+                for (let i = 1; i <= 3; i++) {
                     setTimeout(() => {
-                        const testPeerId = `${roomId}-test${i}`;
-                        if (testPeerId !== peerId && !connections.has(testPeerId) && !knownPeers.has(testPeerId)) {
+                        const testPeerId = `${roomId}-user${i}`;
+                        if (testPeerId !== peerId && !connections.has(testPeerId)) {
                             tryConnectToPeer(testPeerId);
                         }
-                    }, i * 1500);
+                    }, i * 2000);
                 }
                 
                 // Simulate finding peers over time
                 setInterval(() => {
                     // In a real app, this would be a proper peer discovery process
-                    const randomPeer = `${roomId}-user${Math.floor(Math.random() * 100)}`;
-                    if (randomPeer !== peerId && !connections.has(randomPeer) && !knownPeers.has(randomPeer)) {
+                    const randomPeer = `${roomId}-user${Math.floor(Math.random() * 10)}`;
+                    if (randomPeer !== peerId && !connections.has(randomPeer)) {
                         tryConnectToPeer(randomPeer);
                     }
-                }, 8000);
+                }, 10000);
             }
             
             function tryConnectToPeer(peerIdToTry) {
-                if (connections.has(peerIdToTry) || knownPeers.has(peerIdToTry)) return;
+                if (connections.has(peerIdToTry)) return;
                 
-                knownPeers.add(peerIdToTry);
                 console.log('Trying to connect to: ' + peerIdToTry);
                 
                 try {
@@ -554,11 +628,10 @@
                     
                     conn.on('error', function(err) {
                         // Expected for most connection attempts in this simulation
-                        knownPeers.delete(peerIdToTry);
+                        console.log('Could not connect to ' + peerIdToTry);
                     });
                 } catch (err) {
                     console.error('Error creating connection:', err);
-                    knownPeers.delete(peerIdToTry);
                 }
             }
             
@@ -577,7 +650,7 @@
                     
                     statusIndicator.classList.remove('searching');
                     statusIndicator.classList.add('connected');
-                    connectionStatusText.textContent = 'Connected to peers';
+                    connectionStatusText.textContent = 'Connected to other users';
                     
                     showToast('Connected to another user!');
                 });
@@ -595,7 +668,7 @@
                     if (connections.size === 0) {
                         statusIndicator.classList.remove('connected');
                         statusIndicator.classList.add('searching');
-                        connectionStatusText.textContent = 'Searching for peers...';
+                        connectionStatusText.textContent = 'Looking for other users...';
                     }
                 });
                 
@@ -785,8 +858,16 @@
                 });
             }
             
+            function copyShareUrl() {
+                shareUrlInput.select();
+                document.execCommand('copy');
+                showToast('Share URL copied to clipboard!');
+            }
+            
             function loadPostsFromStorage() {
-                const postsJson = localStorage.getItem('posts');
+                // Use room-specific storage key
+                const storageKey = `posts_${roomId}`;
+                const postsJson = localStorage.getItem(storageKey);
                 if (postsJson) {
                     try {
                         const postsArray = JSON.parse(postsJson);
@@ -794,13 +875,24 @@
                     } catch (e) {
                         console.error('Error parsing posts from localStorage:', e);
                         posts = new Map();
-                    }
+                    localStorage.removeItem(storageKey);
+                    showToast('Error loading saved posts');
+                    setTimeout(() => {
+                        localStorage.setItem(storageKey, JSON.stringify([]));
+                    }, 1000);
                 }
             }
             
             function savePostsToStorage() {
-                const postsArray = Array.from(posts.entries());
-                localStorage.setItem('posts', JSON.stringify(postsArray));
+                // Use room-specific storage key
+                const storageKey = `posts_${roomId}`;
+                try {
+                    const postsArray = Array.from(posts.entries());
+                    localStorage.setItem(storageKey, JSON.stringify(postsArray));
+                } catch (e) {
+                    console.error('Error saving posts to localStorage:', e);
+                    showToast('Error saving posts');
+                }
             }
             
             function clearLocalPosts() {
