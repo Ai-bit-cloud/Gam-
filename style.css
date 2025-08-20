@@ -1,0 +1,25 @@
+/* style.css */
+body {
+  font-family: sans-serif;
+  background: #111;
+  color: #fff;
+  text-align: center;
+}
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  padding: 2rem;
+}
+.game-card {
+  background: #222;
+  padding: 1rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #0ff;
+  transition: transform 0.2s;
+}
+.game-card:hover {
+  transform: scale(1.05);
+  background: #333;
+}
